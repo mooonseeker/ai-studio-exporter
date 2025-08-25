@@ -201,8 +201,17 @@ function formatToMarkdown(dialogues) {
     let markdownContent = '# Gemini Chat History\n\n'; // 添加一级标题
 
     dialogues.forEach((dialogue, index) => {
-        const roleName = dialogue.role.charAt(0).toUpperCase() + dialogue.role.slice(1);
-        markdownContent += `## ${roleName}\n\n`; // 将角色标记改为二级标题
+        // 为不同角色添加emoji标签
+        let roleHeader;
+        if (dialogue.role === 'user') {
+            roleHeader = '🧑‍💻 User';
+        } else if (dialogue.role === 'model') {
+            roleHeader = '🤖 Model';
+        } else {
+            roleHeader = dialogue.role.charAt(0).toUpperCase() + dialogue.role.slice(1);
+        }
+
+        markdownContent += `## ${roleHeader}\n\n`; // 将角色标记改为二级标题
 
         if (dialogue.role === 'model' && dialogue.texts.length === 2) {
             // 如果是模型且有两部分，则分别用三级标题标记
