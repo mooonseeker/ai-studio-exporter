@@ -92,28 +92,98 @@ observer.observe(document.body, {
 
 function parseCode(codeString) {
     const dialogues = [];
-    // 正则表达式：匹配一个完整的 types.Content(...) 块
-    const contentBlockRegex = /types\.Content\([\s\S]*?role="([^"]+)"[\s\S]*?parts=\[([\s\S]*?)\][\s\S]*?\)/g;
 
-    let contentMatch;
-    while ((contentMatch = contentBlockRegex.exec(codeString)) !== null) {
-        const role = contentMatch[1];
-        const partsContent = contentMatch[2]; // parts 数组内的所有内容
+    // 改进的解析策略：分层解析
+    // 第一步：找到所有 types.Content 块的起始位置
+    const contentStartRegex = /types\.Content\s*\(/g;
+    const contentBlocks = [];
 
-        // 如果是 'user' 角色且包含占位符，则直接跳过整个 Content 块
-        if (role === 'user' && partsContent.includes('INSERT_INPUT_HERE')) {
-            continue;
+    let match;
+    while ((match = contentStartRegex.exec(codeString)) !== null) {
+        const startPos = match.index;
+
+        // 使用括号计数器找到对应的结束位置
+        let bracketCount = 0;
+        let pos = startPos + match[0].length - 1; // 从开括号开始
+        let endPos = -1;
+
+        while (pos < codeString.length) {
+            const char = codeString[pos];
+            if (char === '(') {
+                bracketCount++;
+            } else if (char === ')') {
+                bracketCount--;
+                if (bracketCount === 0) {
+                    endPos = pos;
+                    break;
+                }
+            }
+            pos++;
         }
 
+        if (endPos !== -1) {
+            const contentBlock = codeString.substring(startPos, endPos + 1);
+            contentBlocks.push(contentBlock);
+        }
+    }
+
+    // 第二步：解析每个Content块
+    contentBlocks.forEach((contentBlock) => {
+        // 提取role
+        const roleMatch = contentBlock.match(/role\s*=\s*"([^"]+)"/);
+        if (!roleMatch) {
+            return;
+        }
+
+        const role = roleMatch[1];
+
+        // 检查是否包含占位符
+        if (role === 'user' && contentBlock.includes('INSERT_INPUT_HERE')) {
+            return;
+        }
+
+        // 找到parts数组的边界
+        const partsStartMatch = contentBlock.match(/parts\s*=\s*\[/);
+        if (!partsStartMatch) {
+            return;
+        }
+
+        const partsStartPos = contentBlock.indexOf(partsStartMatch[0]) + partsStartMatch[0].length;
+
+        // 使用括号计数器找到parts数组的结束位置
+        let squareBracketCount = 1; // 已经遇到了开始的 [
+        let pos = partsStartPos;
+        let partsEndPos = -1;
+
+        while (pos < contentBlock.length && squareBracketCount > 0) {
+            const char = contentBlock[pos];
+            if (char === '[') {
+                squareBracketCount++;
+            } else if (char === ']') {
+                squareBracketCount--;
+                if (squareBracketCount === 0) {
+                    partsEndPos = pos;
+                    break;
+                }
+            }
+            pos++;
+        }
+
+        if (partsEndPos === -1) {
+            return;
+        }
+
+        const partsContent = contentBlock.substring(partsStartPos, partsEndPos);
+
+        // 第三步：解析parts数组中的所有文本内容
         const texts = [];
-        // 正则表达式：从 partsContent 中提取每个 from_text 的内容
-        const textPartRegex = /types\.Part\.from_text\(text="""((?:.|\n)*?)"""\)/g;
+
+        // 查找所有 types.Part.from_text 调用
+        const partRegex = /types\.Part\.from_text\s*\(\s*text\s*=\s*"""([\s\S]*?)"""\s*\)/g;
 
         let textMatch;
-        while ((textMatch = textPartRegex.exec(partsContent)) !== null) {
-            // textMatch[1] 对应 """...""" 引号的内容
+        while ((textMatch = partRegex.exec(partsContent)) !== null) {
             const rawText = textMatch[1] || "";
-            // 处理转义引号并去除空白字符
             const text = rawText.replace(/\\"/g, '"').trim();
             texts.push(text);
         }
@@ -121,7 +191,8 @@ function parseCode(codeString) {
         if (texts.length > 0) {
             dialogues.push({ role, texts });
         }
-    }
+    });
+
     return dialogues;
 }
 
