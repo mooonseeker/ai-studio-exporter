@@ -31,29 +31,34 @@ function injectExportButton() {
                                       <div class="ng-star-inserted">Export</div>
                                     </span>`;
 
-        exportButton.addEventListener('click', () => {
+        exportButton.addEventListener('click', async () => {
             console.log('Export button clicked!');
             const codeArea = document.querySelector(SELECTORS.CODE_AREA);
             if (codeArea) {
                 const codeString = codeArea.innerText;
                 const parsedDialogues = parseCode(codeString);
                 console.log('Parsed dialogues:', parsedDialogues);
-                const markdown = formatToMarkdown(parsedDialogues);
-                // 创建 Blob 对象
-                const blob = new Blob([markdown], { type: 'text/markdown;charset=utf-8' });
-                // 创建下载链接
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = 'gemini-chat-history.md';
-                // 模拟点击下载
-                document.body.appendChild(a); // 附加到body才能模拟点击
-                a.click();
-                document.body.removeChild(a); // 移除元素
-                // 释放URL对象
-                URL.revokeObjectURL(url);
+                try {
+                    const markdown = await formatToMarkdown(parsedDialogues);
+                    // 创建 Blob 对象
+                    const blob = new Blob([markdown], { type: 'text/markdown;charset=utf-8' });
+                    // 创建下载链接
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = 'gemini-chat-history.md';
+                    // 模拟点击下载
+                    document.body.appendChild(a); // 附加到body才能模拟点击
+                    a.click();
+                    document.body.removeChild(a); // 移除元素
+                    // 释放URL对象
+                    URL.revokeObjectURL(url);
 
-                alert('Gemini chat history exported to gemini-chat-history.md');
+                    alert('Gemini chat history exported to gemini-chat-history.md');
+                } catch (error) {
+                    console.error('Error generating markdown:', error);
+                    alert('Error generating export file. Please check the console for details.');
+                }
             } else {
                 alert('Could not find code area to extract code from.');
             }
@@ -197,7 +202,15 @@ function parseCode(codeString) {
 }
 
 
-function formatToMarkdown(dialogues) {
+async function formatToMarkdown(dialogues) {
+    // 读取用户设置
+    const settings = await new Promise((resolve) => {
+        chrome.storage.sync.get({
+            includeThink: true,
+            collapseThink: true
+        }, resolve);
+    });
+
     let markdownContent = '# Gemini Chat History\n\n'; // 添加一级标题
 
     dialogues.forEach((dialogue, index) => {
@@ -214,9 +227,22 @@ function formatToMarkdown(dialogues) {
         markdownContent += `## ${roleHeader}\n\n`; // 将角色标记改为二级标题
 
         if (dialogue.role === 'model' && dialogue.texts.length === 2) {
-            // 如果是模型且有两部分，则分别用三级标题标记
-            markdownContent += `### think\n\n${dialogue.texts[0].trim()}\n\n`;
-            markdownContent += `### answer\n\n${dialogue.texts[1].trim()}\n\n`;
+            // 如果是模型且有两部分
+            if (settings.includeThink) {
+                if (settings.collapseThink) {
+                    // 折叠 think 部分
+                    markdownContent += `<div style="border: 2px solid #dddddd; border-radius: 10px;">\n  <details style="padding: 5px;">\n    <summary>Thinging...</summary>\n    ${dialogue.texts[0].trim()}\n  </details>\n</div>\n\n`;
+                    // 不再需要 answer header
+                    markdownContent += `${dialogue.texts[1].trim()}\n\n`;
+                } else {
+                    // 不折叠 think 部分
+                    markdownContent += `### think\n\n${dialogue.texts[0].trim()}\n\n`;
+                    markdownContent += `### answer\n\n${dialogue.texts[1].trim()}\n\n`;
+                }
+            } else {
+                // 不包含 think 部分，只显示 answer
+                markdownContent += `${dialogue.texts[1].trim()}\n\n`;
+            }
         } else {
             markdownContent += dialogue.texts.map(text => text.trim()).join('\n\n');
             markdownContent += '\n\n'; // 确保内容后有空行
