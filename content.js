@@ -107,14 +107,14 @@ function parseCode(codeString) {
 
         const texts = [];
         // 正则表达式：从 partsContent 中提取每个 from_text 的内容
-        const textPartRegex = /types\.Part\.from_text\(text=(?:"((?:.|\n)*?)"|"""((?:.|\n)*?)""")\)/g;
+        const textPartRegex = /types\.Part\.from_text\(text="""((?:.|\n)*?)"""\)/g;
 
         let textMatch;
         while ((textMatch = textPartRegex.exec(partsContent)) !== null) {
-            // textMatch[1] 对应 "..." 引号的内容, textMatch[2] 对应 """...""" 引号的内容
-            const rawText = textMatch[1] || textMatch[2] || "";
-            // 移除开头和结尾的多余引号，处理转义引号
-            const text = rawText.replace(/^"+|"+$/g, '').replace(/\\"/g, '"').trim();
+            // textMatch[1] 对应 """...""" 引号的内容
+            const rawText = textMatch[1] || "";
+            // 处理转义引号并去除空白字符
+            const text = rawText.replace(/\\"/g, '"').trim();
             texts.push(text);
         }
 
@@ -135,8 +135,8 @@ function formatToMarkdown(dialogues) {
 
         if (dialogue.role === 'model' && dialogue.texts.length === 2) {
             // 如果是模型且有两部分，则分别用三级标题标记
-            markdownContent += `### think\n${dialogue.texts[0].trim()}\n\n`;
-            markdownContent += `### answer\n${dialogue.texts[1].trim()}\n\n`;
+            markdownContent += `### think\n\n${dialogue.texts[0].trim()}\n\n`;
+            markdownContent += `### answer\n\n${dialogue.texts[1].trim()}\n\n`;
         } else {
             markdownContent += dialogue.texts.map(text => text.trim()).join('\n\n');
             markdownContent += '\n\n'; // 确保内容后有空行
